@@ -187,6 +187,11 @@ export class GameComponent implements OnInit, OnDestroy {
 
   handleWsMessage(msg: AiTurnMessage): void {
     this.aiMessages = [...this.aiMessages, msg];
+    // Live map update: apply each state_after so AI units visually move step by step
+    if (msg.state_after) {
+      this.game.updateState(msg.state_after as unknown as GameState);
+    }
+    // Final state supersedes (contains fog-filtered AI data)
     if (msg.done && msg.final_state) {
       this.game.updateState(msg.final_state as unknown as GameState);
     }

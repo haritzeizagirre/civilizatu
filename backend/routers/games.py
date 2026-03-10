@@ -271,7 +271,7 @@ async def ai_turn_websocket(websocket: WebSocket, game_id: str):
                 state, event = process_action(state, "ai", action_type, details)
 
             state_snapshot = _state_to_doc(state)
-            state_snapshot["ai_filtered"] = filter_ai_state_for_player(state)
+            state_snapshot["ai"] = filter_ai_state_for_player(state)
 
             await websocket.send_json({
                 "action_index": i + 1,
@@ -295,7 +295,7 @@ async def ai_turn_websocket(websocket: WebSocket, game_id: str):
         )
 
         final = _state_to_doc(state)
-        final["ai_filtered"] = filter_ai_state_for_player(state)
+        final["ai"] = filter_ai_state_for_player(state)
         await websocket.send_json({
             "done": True,
             "reasoning": ai_response.get("reasoning", ""),

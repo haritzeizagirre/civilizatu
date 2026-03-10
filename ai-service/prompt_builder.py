@@ -51,8 +51,8 @@ Respond ONLY with this JSON structure:
   "analysis": "Brief analysis of the current game situation"
 }}
 
-Valid structureTypes: granary, library, barracks, market, temple, forge
-Valid unitTypes: warrior, archer, knight, settler, eagle_warrior, legion
+Valid structureTypes: granary, library, barracks, market, temple, forge, workshop, aqueduct, colosseum, university, factory, power_plant
+Valid unitTypes: warrior, archer, knight, settler, eagle_warrior, legion, tank
 """
     return [
         {"role": "system", "content": SYSTEM_PROMPT},

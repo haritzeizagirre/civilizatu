@@ -179,31 +179,34 @@ export class AiTurnOverlayComponent implements OnChanges, OnDestroy {
     if (msg.status && !msg.action && !msg.done) return '⚙';
     if (msg.done) return '✅';
     if (msg.error) return '❌';
-    const action = msg.action ? Object.keys(msg.action)[0] : null;
+    // Backend sends action as {type: string, details?: {...}}
+    const actionType = (msg.action?.['type'] as string) ?? '';
     const icons: Record<string, string> = {
       moveUnit: '🚶', attackEnemy: '⚔', buildStructure: '🏗', trainUnit: '🪖',
-      researchTechnology: '🔬', foundCity: '🏙', endTurn: '⏭'
+      researchTechnology: '🔬', foundCity: '🏙', endTurn: '⏭', improveResource: '⛏'
     };
-    return action ? (icons[action] ?? '▶') : '▶';
+    return actionType ? (icons[actionType] ?? '▶') : '▶';
   }
 
   msgText(msg: AiTurnMessage): string {
     if (msg.status && !msg.action && !msg.done) return msg.status;
     if (msg.done) return 'AI turn finished.';
     if (msg.error) return msg.error;
-    const actionObj = msg.action ?? {};
-    const actionType = Object.keys(actionObj)[0] ?? '';
-    const params: any = actionObj[actionType] ?? {};
-    const labels: Record<string, string> = {
-      moveUnit: `Moving unit to (${params.x ?? '?'}, ${params.y ?? '?'})`,
-      attackEnemy: `Attacking unit`,
-      buildStructure: `Building ${params.buildingType ?? '?'}`,
-      trainUnit: `Training ${params.unitType ?? '?'}`,
-      researchTechnology: `Researching ${params.techId ?? '?'}`,
-      foundCity: `Founding new city`,
-      endTurn: 'AI ends turn',
+    // Backend sends action as {type: string, details?: {...}}
+    const actionType = (msg.action?.['type'] as string) ?? '';
+    const details: any = msg.action?.['details'] ?? {};
+    const dest = details.destination ?? {};
+    const labels: Record<string, () => string> = {
+      moveUnit: () => `Moving unit → (${dest.x ?? '?'}, ${dest.y ?? '?'})`,
+      attackEnemy: () => `Attacking enemy unit`,
+      buildStructure: () => `Building ${details.structureType ?? details.buildingType ?? '?'}`,
+      trainUnit: () => `Training ${details.unitType ?? '?'}`,
+      researchTechnology: () => `Researching ${details.techId ?? '?'}`,
+      foundCity: () => `Founding new city`,
+      endTurn: () => 'AI ends turn',
+      improveResource: () => `Improving resource`,
     };
-    return labels[actionType] ?? `Action: ${actionType}`;
+    return labels[actionType] ? labels[actionType]() : (actionType ? `Action: ${actionType}` : 'Processing…');
   }
 
   isDoneMsg(msg: AiTurnMessage): boolean { return !!msg.done; }
