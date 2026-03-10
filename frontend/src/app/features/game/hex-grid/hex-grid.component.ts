@@ -7,7 +7,32 @@ import { GameState, Tile, Unit, City, TileType } from '../../../core/models/game
 import { GameService } from '../../../core/services/game.service';
 import { Subscription } from 'rxjs';
 
-// Hex size in pixels
+// ─── Animation types ─────────────────────────────────────────────────────────
+interface Pos { x: number; y: number; }
+
+interface CombatAnim {
+  attackerPos: Pos;   // hex coords
+  defenderPos: Pos;
+  t: number;          // 0 → 1 progress
+  damage?: number;
+}
+
+interface MoveAnim {
+  unitId: string;
+  from: Pos;          // pixel coords
+  to: Pos;
+  t: number;          // 0 → 1 progress
+}
+
+interface FloatingText {
+  text: string;
+  px: number;         // pixel coords
+  py: number;
+  t: number;          // 0 → 1 (fades out)
+  color: string;
+}
+
+// ─── Hex size in pixels ───────────────────────────────────────────────────────
 const HEX_SIZE = 36;
 const HEX_W = Math.sqrt(3) * HEX_SIZE;
 const HEX_H = 2 * HEX_SIZE;
@@ -84,6 +109,21 @@ export class HexGridComponent implements OnChanges, AfterViewInit, OnDestroy {
   private reachableTiles: Set<string> = new Set();
   private sub = new Subscription();
 
+  // ─── Animation state ────────────────────────────────────────────────────────
+  private combatAnim: CombatAnim | null = null;
+  private moveAnim: MoveAnim | null = null;
+  private floatingTexts: FloatingText[] = [];
+  private animFrame: number | null = null;
+  private lastTs = 0;
+
+  // Combat animation durations (ms)
+  private readonly FLASH_DUR = 250;
+  private readonly PROJ_DUR  = 350;
+  private readonly EXPLO_DUR = 350;
+  private readonly TOTAL_ANIM = this.FLASH_DUR + this.PROJ_DUR + this.EXPLO_DUR;
+  private readonly MOVE_DUR  = 400;
+  private readonly TEXT_DUR  = 900;
+
   constructor(private gameService: GameService) {}
 
   ngAfterViewInit(): void {
@@ -106,6 +146,7 @@ export class HexGridComponent implements OnChanges, AfterViewInit, OnDestroy {
   ngOnDestroy(): void {
     this.sub.unsubscribe();
     window.removeEventListener('resize', () => this.resizeCanvas());
+    if (this.animFrame !== null) { cancelAnimationFrame(this.animFrame); }
   }
 
   private resizeCanvas(): void {
@@ -148,6 +189,8 @@ export class HexGridComponent implements OnChanges, AfterViewInit, OnDestroy {
 
     // Draw units
     for (const unit of this.state.player.units) {
+      // Skip moving unit – it's rendered by the animation overlay instead
+      if (this.moveAnim?.unitId === unit.id) continue;
       const { x: px, y: py } = hexToPixel(unit.position.x, unit.position.y);
       this.drawUnit(ctx, px, py, unit, 'player', unit.id === this.selectedUnitId);
     }
@@ -163,6 +206,9 @@ export class HexGridComponent implements OnChanges, AfterViewInit, OnDestroy {
     }
 
     ctx.restore();
+
+    // Animation overlay (drawn outside the map transform so pixel coords are exact)
+    this.drawAnimations();
   }
 
   private drawHex(ctx: CanvasRenderingContext2D, cx: number, cy: number, tile: Tile, explored: boolean): void {
@@ -295,6 +341,211 @@ export class HexGridComponent implements OnChanges, AfterViewInit, OnDestroy {
     }
   }
 
+  // ─── Animation system ────────────────────────────────────────────────────────
+
+  /** Start the rAF loop if not already running. */
+  private startAnimLoop(): void {
+    if (this.animFrame !== null) return;
+    this.lastTs = performance.now();
+    const loop = (ts: number) => {
+      const dt = ts - this.lastTs;
+      this.lastTs = ts;
+      this.tickAnimations(dt);
+      this.draw();
+      if (this.hasActiveAnimations()) {
+        this.animFrame = requestAnimationFrame(loop);
+      } else {
+        this.animFrame = null;
+      }
+    };
+    this.animFrame = requestAnimationFrame(loop);
+  }
+
+  private hasActiveAnimations(): boolean {
+    return this.combatAnim !== null || this.moveAnim !== null || this.floatingTexts.length > 0;
+  }
+
+  private tickAnimations(dt: number): void {
+    // Advance combat
+    if (this.combatAnim) {
+      this.combatAnim.t += dt / this.TOTAL_ANIM;
+      if (this.combatAnim.t >= 1) { this.combatAnim = null; }
+    }
+    // Advance move
+    if (this.moveAnim) {
+      this.moveAnim.t += dt / this.MOVE_DUR;
+      if (this.moveAnim.t >= 1) { this.moveAnim = null; }
+    }
+    // Advance floating texts
+    this.floatingTexts = this.floatingTexts
+      .map(f => ({ ...f, t: f.t + dt / this.TEXT_DUR, py: f.py - dt * 0.04 }))
+      .filter(f => f.t < 1);
+  }
+
+  /** Kick off a combat animation between two hex positions. */
+  startCombatAnim(attackerHex: Pos, defenderHex: Pos, damage?: number): void {
+    this.combatAnim = { attackerPos: attackerHex, defenderPos: defenderHex, t: 0, damage };
+    // Queue floating damage text at defender pixel pos (after projectile phase ~0.7s)
+    const defPx = this.hexToPixelWorld(defenderHex.x, defenderHex.y);
+    setTimeout(() => {
+      const label = damage !== undefined ? `-${damage} HP` : '⚔';
+      this.floatingTexts.push({ text: label, px: defPx.x, py: defPx.y, t: 0, color: '#ff5252' });
+      if (!this.animFrame) this.startAnimLoop();
+    }, this.FLASH_DUR + this.PROJ_DUR);
+    this.startAnimLoop();
+  }
+
+  /** Kick off a smooth move animation for a unit. */
+  startMoveAnim(unitId: string, fromHex: Pos, toHex: Pos): void {
+    const from = this.hexToPixelWorld(fromHex.x, fromHex.y);
+    const to   = this.hexToPixelWorld(toHex.x, toHex.y);
+    this.moveAnim = { unitId, from, to, t: 0 };
+    this.startAnimLoop();
+  }
+
+  /** Convert hex coords → world pixel coords (accounting for offset + zoom). */
+  private hexToPixelWorld(col: number, row: number): Pos {
+    const { x, y } = hexToPixel(col, row);
+    return { x: x * this.zoom + this.offsetX, y: y * this.zoom + this.offsetY };
+  }
+
+  /** Draw all active animations on top of the map (in screen space). */
+  private drawAnimations(): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+
+    // ── Combat animation ───────────────────────────────────────────────────
+    if (this.combatAnim) {
+      const { attackerPos, defenderPos, t } = this.combatAnim;
+      const aPx = this.hexToPixelWorld(attackerPos.x, attackerPos.y);
+      const dPx = this.hexToPixelWorld(defenderPos.x, defenderPos.y);
+      const flashEnd    = this.FLASH_DUR / this.TOTAL_ANIM;
+      const projEnd     = (this.FLASH_DUR + this.PROJ_DUR) / this.TOTAL_ANIM;
+
+      // Phase 1: Flash both tiles
+      if (t < flashEnd) {
+        const alpha = Math.sin((t / flashEnd) * Math.PI) * 0.7;
+        this.drawScreenHexHighlight(ctx, aPx.x, aPx.y, `rgba(255,200,0,${alpha})`);
+        this.drawScreenHexHighlight(ctx, dPx.x, dPx.y, `rgba(255,80,80,${alpha * 0.6})`);
+      }
+
+      // Phase 2: Projectile
+      if (t >= flashEnd && t < projEnd) {
+        const pt = (t - flashEnd) / (projEnd - flashEnd);
+        // Ease-in for a snappy feel
+        const ep = pt * pt;
+        const px = aPx.x + (dPx.x - aPx.x) * ep;
+        const py = aPx.y + (dPx.y - aPx.y) * ep;
+        // Trail
+        ctx.save();
+        const grad = ctx.createLinearGradient(aPx.x, aPx.y, px, py);
+        grad.addColorStop(0, 'rgba(255,200,0,0)');
+        grad.addColorStop(1, 'rgba(255,200,0,0.7)');
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = 3 * this.zoom;
+        ctx.beginPath();
+        ctx.moveTo(aPx.x, aPx.y);
+        ctx.lineTo(px, py);
+        ctx.stroke();
+        // Head
+        ctx.fillStyle = '#ffd700';
+        ctx.beginPath();
+        ctx.arc(px, py, 5 * this.zoom, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // Phase 3: Explosion at defender
+      if (t >= projEnd) {
+        const et = (t - projEnd) / (1 - projEnd);
+        const maxR = HEX_SIZE * this.zoom * 1.1;
+        const r = maxR * et;
+        const alpha = (1 - et) * 0.85;
+        ctx.save();
+        // Outer ring
+        ctx.strokeStyle = `rgba(255,80,0,${alpha})`;
+        ctx.lineWidth = 4 * this.zoom * (1 - et * 0.7);
+        ctx.beginPath();
+        ctx.arc(dPx.x, dPx.y, r, 0, Math.PI * 2);
+        ctx.stroke();
+        // Inner flash
+        const grad = ctx.createRadialGradient(dPx.x, dPx.y, 0, dPx.x, dPx.y, r * 0.7);
+        grad.addColorStop(0, `rgba(255,220,80,${alpha * 0.8})`);
+        grad.addColorStop(1, 'rgba(255,80,0,0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(dPx.x, dPx.y, r * 0.7, 0, Math.PI * 2);
+        ctx.fill();
+        // Spark particles (8 fixed-angle sparks)
+        for (let i = 0; i < 8; i++) {
+          const angle = (i / 8) * Math.PI * 2;
+          const sr = r * 1.3;
+          const sx = dPx.x + Math.cos(angle) * sr;
+          const sy = dPx.y + Math.sin(angle) * sr;
+          ctx.fillStyle = `rgba(255,200,50,${alpha * 0.9})`;
+          ctx.beginPath();
+          ctx.arc(sx, sy, 3 * this.zoom * (1 - et), 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+    }
+
+    // ── Floating damage texts ──────────────────────────────────────────────
+    for (const ft of this.floatingTexts) {
+      ctx.save();
+      ctx.globalAlpha = 1 - ft.t;
+      ctx.font = `bold ${Math.max(12, 16 * this.zoom)}px Rajdhani, sans-serif`;
+      ctx.fillStyle = ft.color;
+      ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+      ctx.lineWidth = 3;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.strokeText(ft.text, ft.px, ft.py);
+      ctx.fillText(ft.text, ft.px, ft.py);
+      ctx.restore();
+    }
+
+    // ── Move animation – draw animated unit on top ─────────────────────────
+    if (this.moveAnim) {
+      const { from, to, t, unitId } = this.moveAnim;
+      // Ease-out cubic
+      const ease = 1 - Math.pow(1 - t, 3);
+      const px = from.x + (to.x - from.x) * ease;
+      const py = from.y + (to.y - from.y) * ease;
+      const unit = this.state?.player.units.find(u => u.id === unitId);
+      if (unit) {
+        ctx.save();
+        // Draw a subtle motion trail
+        ctx.globalAlpha = 0.4;
+        ctx.fillStyle = '#90caf9';
+        ctx.beginPath();
+        ctx.arc(from.x + (px - from.x) * 0.5, from.y + (py - from.y) * 0.5, 4 * this.zoom, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        // Draw unit at interpolated position (in screen space, so undo zoom offset)
+        const cx = (px - this.offsetX) / this.zoom;
+        const cy = (py - this.offsetY) / this.zoom;
+        ctx.translate(this.offsetX, this.offsetY);
+        ctx.scale(this.zoom, this.zoom);
+        this.drawUnit(ctx, cx, cy, unit, 'player', true);
+        ctx.restore();
+      }
+    }
+  }
+
+  /** Draw a hex highlight in screen pixel coords (no map transform needed). */
+  private drawScreenHexHighlight(ctx: CanvasRenderingContext2D, cx: number, cy: number, color: string): void {
+    const r = HEX_SIZE * this.zoom;
+    const corners = hexCorners(0, 0).map(([x, y]) => [x * this.zoom + cx, y * this.zoom + cy] as [number, number]);
+    ctx.beginPath();
+    ctx.moveTo(corners[0][0], corners[0][1]);
+    for (let i = 1; i < 6; i++) ctx.lineTo(corners[i][0], corners[i][1]);
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.fill();
+  }
+
   // ─── Interaction ──────────────────────────────────────────────────────────
 
   private pixelToHex(px: number, py: number): { x: number; y: number } | null {
@@ -385,6 +636,10 @@ export class HexGridComponent implements OnChanges, AfterViewInit, OnDestroy {
     // Check for enemy unit (attack if a player unit is selected)
     const enemyUnit = (this.state.ai?.units as any[])?.find((u: any) => u.position?.x === hex.x && u.position?.y === hex.y);
     if (enemyUnit && this.selectedUnitId) {
+      const attacker = this.state.player.units.find(u => u.id === this.selectedUnitId);
+      if (attacker) {
+        this.startCombatAnim(attacker.position, hex, Math.floor(Math.random() * 30 + 10));
+      }
       this.attackUnit.emit({ attackerUnitId: this.selectedUnitId, defenderUnitId: enemyUnit.id });
       this.gameService.selectUnit(null);
       return;
@@ -392,6 +647,8 @@ export class HexGridComponent implements OnChanges, AfterViewInit, OnDestroy {
 
     // Move to reachable tile
     if (this.selectedUnitId && this.reachableTiles.has(`${hex.x},${hex.y}`)) {
+      const unit = this.state.player.units.find(u => u.id === this.selectedUnitId);
+      if (unit) { this.startMoveAnim(unit.id, unit.position, hex); }
       this.moveUnit.emit({ unitId: this.selectedUnitId, x: hex.x, y: hex.y });
       this.gameService.selectUnit(null);
       return;
