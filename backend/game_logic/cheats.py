@@ -26,7 +26,7 @@ def apply_cheat(state: GameState, cheat_code: str, target: dict | None) -> tuple
 
     p = state.player
     target = target or {}
-    city_id = target.get("id")
+    city_id = target.get("cityId") or target.get("id")
 
     if cheat_code == "eraiki_guztiak":
         city = next((c for c in p.cities if c.id == city_id), p.cities[0] if p.cities else None)

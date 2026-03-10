@@ -124,8 +124,9 @@ export class CheatConsoleComponent {
     if (this.selectedCityId) params['cityId'] = this.selectedCityId;
 
     this.gameService.sendCheat(this.gameId, code, params).subscribe({
-      next: () => {
-        this.log.push({ msg: 'Cheat applied!', success: true });
+      next: (state) => {
+        const msg = (state as any)?.cheat_result?.message ?? 'Cheat applied!';
+        this.log.push({ msg, success: true });
         this.scrollLog();
       },
       error: (e: any) => {

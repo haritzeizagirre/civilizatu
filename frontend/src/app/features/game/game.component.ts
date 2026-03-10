@@ -84,6 +84,7 @@ import { VictoryModalComponent } from './victory-modal/victory-modal.component';
       <app-cheat-console
         *ngIf="cheatOpen"
         [gameId]="gameId"
+        [selectedCityId]="selectedCityId"
         (close)="cheatOpen = false"
       />
 
