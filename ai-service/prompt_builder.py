@@ -1,59 +1,72 @@
 """Builds the GroQ prompt from game state JSON."""
 import json
 
-SYSTEM_PROMPT = """You are an AI agent playing a Civilization-inspired turn-based strategy game called CIVilizaTu.
-Your goal is to expand your empire, manage resources, develop cities, research technologies, and defeat the human player.
+SYSTEM_PROMPT = """You are an AI playing CIVilizaTu (Civilization-like game). Expand your empire and defeat the human.
+Rules: only act on owner=ai units/cities; movement distance=1; impassable: ocean/mountains; end turn with endTurn.
+Respond with valid JSON only, no markdown."""
 
-RULES:
-- You control units marked with owner="ai"
-- You must only act on your own cities and units
-- Movement: units can only move to adjacent tiles (distance 1); impassable tile types: ocean, mountains
-- Cities can only build one structure at a time (production_queue)
-- You MUST end your turn with an "endTurn" action
-- Respect unit movement_points_left; a unit with 0 points cannot move or attack
-- You can only research one technology at a time (current_research)
 
-Always respond with valid JSON. No markdown fences, no explanation outside the JSON.
-"""
+def _slim_state(game_state: dict) -> dict:
+    """Return a compact AI-relevant slice of the game state."""
+    ai = game_state.get("ai", {})
+    player = game_state.get("player", {})
 
-def build_messages(game_state: dict) -> list[dict]:
-    # Truncate the tile list to keep tokens low – only first 200 tiles + summary
-    state_copy = game_state.copy()
-    tiles = state_copy.get("map", {}).get("tiles", [])
-    fog = state_copy.get("map", {}).get("fog_of_war", [])
-    state_copy["map"] = {
-        "width": state_copy.get("map", {}).get("width", 50),
-        "height": state_copy.get("map", {}).get("height", 50),
-        "tiles_sample": tiles[:150],  # send first 150 tiles to save tokens
-        "total_tiles": len(tiles),
+    # Only the tiles visible to AI (non-fog) and near AI units/cities — cap at 60
+    tiles = game_state.get("map", {}).get("tiles", [])
+    ai_positions = set()
+    for u in ai.get("units", []):
+        p = u.get("position", {})
+        ai_positions.add((p.get("x", 0), p.get("y", 0)))
+    for c in ai.get("cities", []):
+        p = c.get("position", {})
+        ai_positions.add((p.get("x", 0), p.get("y", 0)))
+
+    def near_ai(t):
+        tx, ty = t.get("x", 0), t.get("y", 0)
+        return any(abs(tx - px) + abs(ty - py) <= 4 for px, py in ai_positions)
+
+    nearby = [t for t in tiles if near_ai(t)][:60]
+    if len(nearby) < 20:
+        nearby = tiles[:60]  # fallback if no AI units yet
+
+    # Strip heavy player data — only expose position & unit IDs (for attack targeting)
+    player_units_slim = [
+        {"id": u.get("id"), "position": u.get("position"), "health": u.get("health"), "unit_type": u.get("unit_type")}
+        for u in player.get("units", [])
+    ]
+    player_cities_slim = [
+        {"id": c.get("id"), "position": c.get("position"), "name": c.get("name")}
+        for c in player.get("cities", [])
+    ]
+
+    return {
+        "turn": game_state.get("turn"),
+        "current_player": game_state.get("current_player"),
+        "ai": ai,
+        "player_units": player_units_slim,
+        "player_cities": player_cities_slim,
+        "map_tiles": nearby,
     }
 
-    state_json = json.dumps(state_copy, indent=2, default=str)
 
-    user_content = f"""Current game state:
+def build_messages(game_state: dict) -> list[dict]:
+    slim = _slim_state(game_state)
+    state_json = json.dumps(slim, separators=(",", ":"), default=str)
 
-<game_state>
-{state_json}
-</game_state>
-
-Analyze the situation and decide your actions for this turn.
-Respond ONLY with this JSON structure:
-{{
-  "actions": [
-    {{"type": "moveUnit", "details": {{"unitId": "...", "destination": {{"x": 0, "y": 0}}}}}},
-    {{"type": "buildStructure", "details": {{"cityId": "...", "structureType": "granary"}}}},
-    {{"type": "trainUnit", "details": {{"cityId": "...", "unitType": "warrior"}}}},
-    {{"type": "researchTechnology", "details": {{"techId": "..."}}}},
-    {{"type": "attackEnemy", "details": {{"attackerUnitId": "...", "defenderUnitId": "..."}}}},
-    {{"type": "endTurn"}}
-  ],
-  "reasoning": "Brief explanation of your strategy",
-  "analysis": "Brief analysis of the current game situation"
-}}
-
-Valid structureTypes: granary, library, barracks, market, temple, forge, workshop, aqueduct, colosseum, university, factory, power_plant
-Valid unitTypes: warrior, archer, knight, settler, eagle_warrior, legion, tank
-"""
+    user_content = (
+        f"Game state:{state_json}\n\n"
+        "Respond ONLY with JSON:\n"
+        '{"actions":['
+        '{"type":"moveUnit","details":{"unitId":"u1","destination":{"x":3,"y":4}}},'
+        '{"type":"buildStructure","details":{"cityId":"c1","structureType":"granary"}},'
+        '{"type":"trainUnit","details":{"cityId":"c1","unitType":"warrior"}},'
+        '{"type":"researchTechnology","details":{"techId":"agriculture"}},'
+        '{"type":"attackEnemy","details":{"attackerUnitId":"u1","defenderUnitId":"u2"}},'
+        '{"type":"endTurn"}],'
+        '"reasoning":"short","analysis":"short"}\n'
+        "Valid structureTypes: granary,library,barracks,market,temple,forge,workshop,aqueduct,colosseum,university,factory,power_plant\n"
+        "Valid unitTypes: warrior,archer,knight,settler,eagle_warrior,legion,tank"
+    )
     return [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": user_content},

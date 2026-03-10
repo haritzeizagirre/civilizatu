@@ -40,7 +40,7 @@ async def decide(body: dict):
     mm = get_model_manager()
     messages = build_messages(body)
     try:
-        raw = mm.chat(messages, max_tokens=1200)
+        raw = mm.chat(messages, max_tokens=500)
         result = parse_response(raw)
     except Exception as e:
         logger.error("AI decision error: %s", e)

@@ -6,8 +6,8 @@ from groq import Groq, RateLimitError
 logger = logging.getLogger(__name__)
 
 MODELS = [
-    "llama-3.3-70b-versatile",
-    "llama-3.1-8b-instant",
+    "llama-3.1-8b-instant",      # fast, generous TPM on free tier
+    "llama-3.3-70b-versatile",   # smarter but higher token cost
     "mixtral-8x7b-32768",
 ]
 
@@ -26,8 +26,8 @@ class ModelManager:
         self._model_index = (self._model_index + 1) % len(MODELS)
         logger.warning("Switched to model: %s", self.current_model)
 
-    def chat(self, messages: list[dict], max_tokens: int = 1500) -> str:
-        """Send a chat completion; auto-retry on rate-limit with next model."""
+    def chat(self, messages: list[dict], max_tokens: int = 500) -> str:
+        """Send a chat completion; auto-retry on rate-limit or token-size error with next model."""
         last_exc = None
         for attempt in range(len(MODELS)):
             try:
@@ -51,8 +51,15 @@ class ModelManager:
                 self._next_model()
                 last_exc = e
             except Exception as e:
-                logger.error("GroQ call error: %s", e)
-                raise
+                # Also catch 413 / token-limit errors and try next model
+                err_str = str(e)
+                if "413" in err_str or "rate_limit_exceeded" in err_str or "too large" in err_str.lower():
+                    logger.warning("Token limit on %s (attempt %d): %s", self.current_model, attempt + 1, e)
+                    self._next_model()
+                    last_exc = e
+                else:
+                    logger.error("GroQ call error: %s", e)
+                    raise
 
         raise last_exc or RuntimeError("All GroQ models exhausted")
 
