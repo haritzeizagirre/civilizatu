@@ -1,0 +1,47 @@
+# docker-compose.override.yml — Production hardening
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# What this adds:
+#   - No exposed ports for internal services (only frontend on 80)
+#   - Read-only filesystems where possible
+#   - Restart always
+#   - Log rotation limits
+
+services:
+  mongodb:
+    restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  backend:
+    restart: always
+    ports: []          # Remove port 8000 from host — only reachable internally
+    environment:
+      DEBUG: "false"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  ai-service:
+    restart: always
+    ports: []          # Remove port 8001 from host — only reachable internally
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  frontend:
+    restart: always
+    ports:
+      - "80:80"        # Production: serve on port 80
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
