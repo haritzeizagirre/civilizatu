@@ -116,6 +116,7 @@ export class GameComponent implements OnInit, OnDestroy {
   aiTurnActive = false;
   aiMessages: AiTurnMessage[] = [];
   aiSpeed = 1;
+  private aiTimeoutId: any = null;
 
   private subs = new Subscription();
 
@@ -196,6 +197,14 @@ export class GameComponent implements OnInit, OnDestroy {
     this.aiTurnActive = true;
     this.aiMessages = [];
     this.ws.connect(this.gameId);
+    // Safety timeout: if WS never resolves, force reload and return control to player
+    this.aiTimeoutId = setTimeout(() => {
+      if (this.aiTurnActive) {
+        console.warn('[AI] Turn timed out — reloading state');
+        this.game.loadGame(this.gameId).subscribe();
+        this.onAiTurnDone();
+      }
+    }, 30000);
   }
 
   handleWsMessage(msg: AiTurnMessage): void {
@@ -207,10 +216,19 @@ export class GameComponent implements OnInit, OnDestroy {
     // Final state supersedes (contains fog-filtered AI data)
     if (msg.done && msg.final_state) {
       this.game.updateState(msg.final_state as unknown as GameState);
+      // Auto-dismiss the overlay after a short delay so the user doesn't need to click
+      setTimeout(() => this.onAiTurnDone(), 1500);
+    }
+    // If the WebSocket returns an error, recover gracefully
+    if (msg.error) {
+      console.error('[AI] WebSocket error:', msg.error);
+      setTimeout(() => this.onAiTurnDone(), 2000);
     }
   }
 
   onAiTurnDone(): void {
+    clearTimeout(this.aiTimeoutId);
+    this.aiTimeoutId = null;
     this.aiTurnActive = false;
     this.ws.disconnect();
   }

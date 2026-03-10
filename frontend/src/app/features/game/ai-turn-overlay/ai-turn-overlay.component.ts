@@ -12,12 +12,12 @@ import { AiTurnMessage } from '../../../core/services/websocket.service';
   imports: [CommonModule, FormsModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="overlay" *ngIf="messages.length > 0">
+    <div class="overlay">
       <!-- Header -->
       <div class="overlay-header">
         <span class="ai-tag">⚙ AI TURN</span>
         <span class="civ-name">Rome</span>
-        <div class="controls">
+        <div class="controls" *ngIf="messages.length > 0">
           <button class="ctrl-btn" (click)="togglePause()">{{ paused ? '▶' : '⏸' }}</button>
           <button class="ctrl-btn" (click)="stepBack()" [disabled]="cursor <= 0">◀</button>
           <button class="ctrl-btn" (click)="stepForward()" [disabled]="cursor >= messages.length - 1">▶▶</button>
