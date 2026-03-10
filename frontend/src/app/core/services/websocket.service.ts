@@ -29,10 +29,20 @@ export class WebSocketService {
   connect(gameId: string): void {
     if (this.ws) { this.disconnect(); }
 
-    const url = `${environment.wsUrl}/api/games/ws/${gameId}`;
+    // In development, wsUrl is set (e.g. 'ws://localhost:8000') → direct to backend
+    // In production (Docker/nginx), wsUrl is empty → proxy via nginx at /api-backend
+    let url: string;
+    if (environment.wsUrl) {
+      url = `${environment.wsUrl}/api/games/ws/${gameId}`;
+    } else {
+      const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
+      url = `${scheme}://${window.location.host}/api-backend/api/games/ws/${gameId}`;
+    }
+    console.log('[WS] Connecting to', url);
     this.ws = new WebSocket(url);
 
     this.ws.onopen = () => {
+      console.log('[WS] Connected to', url);
       // Send auth token as first message
       this.ws!.send(JSON.stringify({ token: this.authService.token }));
     };
@@ -41,18 +51,21 @@ export class WebSocketService {
       this.zone.run(() => {
         try {
           const msg: AiTurnMessage = JSON.parse(event.data);
+          console.log('[WS] Message:', msg);
           this._messages.next(msg);
         } catch (e) {
-          console.error('WS parse error', e);
+          console.error('[WS] parse error', e);
         }
       });
     };
 
     this.ws.onerror = (err) => {
+      console.error('[WS] Error:', err);
       this.zone.run(() => this._messages.next({ error: 'WebSocket error' }));
     };
 
-    this.ws.onclose = () => {
+    this.ws.onclose = (ev) => {
+      console.log('[WS] Closed. Code:', ev.code, 'Reason:', ev.reason);
       this.ws = null;
     };
   }

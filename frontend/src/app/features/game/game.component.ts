@@ -43,6 +43,7 @@ import { VictoryModalComponent } from './victory-modal/victory-modal.component';
       <!-- HUD (top bar) -->
       <app-hud
         [state]="state"
+        [aiTurn]="aiTurnActive"
         (endTurn)="onEndTurn()"
         (saveGame)="onSave()"
         (openTech)="showTech = true"
