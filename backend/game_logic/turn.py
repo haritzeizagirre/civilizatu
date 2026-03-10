@@ -5,7 +5,7 @@ from typing import Any
 
 from models.game_models import (
     GameState, Unit, City, UnitType, BuildingType,
-    ProductionQueue, Building, TurnPhase, Position
+    ProductionQueue, Building, TurnPhase, Position, DiplomacyStatus
 )
 from game_logic.resources import (
     apply_end_of_turn_resources, tick_production_queues,
@@ -69,6 +69,7 @@ def process_action(state: GameState, owner: str, action_type: str, details: dict
         "researchTechnology": _research_technology,
         "foundCity": _found_city,
         "improveResource": _improve_resource,
+        "diplomacy": _diplomacy,
         "endTurn": _end_turn,
     }
     handler = handlers.get(action_type)
@@ -229,6 +230,50 @@ def _improve_resource(state: GameState, owner: str, details: dict) -> tuple[Game
         return state, {"error": "Tile not owned by you"}
     tile.resource_improved = True
     return state, {"improved": tile.resource.value, "position": {"x": x, "y": y}}
+
+
+def _diplomacy(state: GameState, owner: str, details: dict) -> tuple[GameState, dict]:
+    """Handle diplomacy moves: declare_war, propose_peace, send_gold, propose_alliance."""
+    move = details.get("move")
+    pstate = getattr(state, owner)
+    other = "ai" if owner == "player" else "player"
+    ostate = getattr(state, other)
+
+    if move == "declare_war":
+        pstate.diplomacy_status = DiplomacyStatus.WAR
+        ostate.diplomacy_status = DiplomacyStatus.WAR
+        return state, {"diplomacy": "war_declared"}
+
+    elif move == "propose_peace":
+        if pstate.diplomacy_status != DiplomacyStatus.WAR:
+            return state, {"error": "Not at war"}
+        pstate.diplomacy_status = DiplomacyStatus.PEACE
+        ostate.diplomacy_status = DiplomacyStatus.PEACE
+        return state, {"diplomacy": "peace_agreed"}
+
+    elif move == "send_gold":
+        amount = int(details.get("amount", 50))
+        if pstate.resources.gold < amount:
+            return state, {"error": "Not enough gold"}
+        pstate.resources.gold -= amount
+        # Tribute improves relations: war→peace, peace→alliance
+        if pstate.diplomacy_status == DiplomacyStatus.WAR:
+            pstate.diplomacy_status = DiplomacyStatus.PEACE
+            ostate.diplomacy_status = DiplomacyStatus.PEACE
+            return state, {"diplomacy": "tribute_peace", "gold_sent": amount}
+        else:
+            pstate.diplomacy_status = DiplomacyStatus.ALLIANCE
+            ostate.diplomacy_status = DiplomacyStatus.ALLIANCE
+            return state, {"diplomacy": "tribute_alliance", "gold_sent": amount}
+
+    elif move == "propose_alliance":
+        if pstate.diplomacy_status == DiplomacyStatus.WAR:
+            return state, {"error": "Cannot propose alliance while at war"}
+        pstate.diplomacy_status = DiplomacyStatus.ALLIANCE
+        ostate.diplomacy_status = DiplomacyStatus.ALLIANCE
+        return state, {"diplomacy": "alliance_formed"}
+
+    return state, {"error": f"Unknown diplomacy move: {move}"}
 
 
 def _end_turn(state: GameState, owner: str, details: dict) -> tuple[GameState, dict]:

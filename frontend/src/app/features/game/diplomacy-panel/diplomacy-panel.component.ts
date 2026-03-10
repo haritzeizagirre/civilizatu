@@ -38,13 +38,13 @@ type DiplomacyAction = 'declare_war' | 'propose_peace' | 'send_gold';
         <div class="actions">
           <button
             class="dip-btn war"
-            *ngIf="status !== 'at_war'"
+            *ngIf="status !== 'war' && status !== 'alliance'"
             (click)="doAction('declare_war')"
           >⚔ Declare War</button>
 
           <button
             class="dip-btn peace"
-            *ngIf="status === 'at_war'"
+            *ngIf="status === 'war'"
             (click)="doAction('propose_peace')"
           >🕊 Propose Peace</button>
 
@@ -52,7 +52,7 @@ type DiplomacyAction = 'declare_war' | 'propose_peace' | 'send_gold';
             class="dip-btn gold"
             [disabled]="state.player.resources.gold < 50"
             (click)="doAction('send_gold')"
-          >💰 Send 50 Gold (tribute)</button>
+          >💰 Send 50 Gold {{ status === 'war' ? '(buy peace)' : status === 'peace' ? '(form alliance)' : '(tribute)' }}</button>
         </div>
 
         <div class="flavor-text">
