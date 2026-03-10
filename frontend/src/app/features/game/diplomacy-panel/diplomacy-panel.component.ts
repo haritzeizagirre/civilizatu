@@ -2,6 +2,7 @@ import { Component, Input, Output, EventEmitter, ChangeDetectionStrategy } from 
 import { CommonModule } from '@angular/common';
 import { GameState } from '../../../core/models/game.models';
 import { GameService } from '../../../core/services/game.service';
+import { SoundService } from '../../../core/services/sound.service';
 
 type DiplomacyAction = 'declare_war' | 'propose_peace' | 'send_gold';
 
@@ -115,7 +116,7 @@ export class DiplomacyPanelComponent {
   resultMsg = '';
   isError = false;
 
-  constructor(private gameService: GameService) {}
+  constructor(private gameService: GameService, private sound: SoundService) {}
 
   get status(): string { return this.state?.player?.diplomacy_status ?? 'peace'; }
 
@@ -149,8 +150,11 @@ export class DiplomacyPanelComponent {
       this.resultMsg = 'Not enough gold.'; this.isError = true; return;
     }
     this.gameService.sendAction(this.gameId, actionType, params).subscribe({
-      next: () => { this.resultMsg = 'Diplomatic action sent.'; this.isError = false; },
-      error: (e: any) => { this.resultMsg = e.error?.detail ?? 'Error'; this.isError = true; }
+      next: () => {
+        this.resultMsg = 'Diplomatic action sent.'; this.isError = false;
+        if (action === 'declare_war') { this.sound.playWarDeclared(); } else { this.sound.playDiplomacy(); }
+      },
+      error: (e: any) => { this.resultMsg = e.error?.detail ?? 'Error'; this.isError = true; this.sound.playError(); }
     });
   }
 }

@@ -2,6 +2,7 @@ import { Component, Input, Output, EventEmitter, ChangeDetectionStrategy } from 
 import { CommonModule } from '@angular/common';
 import { GameState } from '../../../core/models/game.models';
 import { GameService } from '../../../core/services/game.service';
+import { SoundService } from '../../../core/services/sound.service';
 
 interface TechNode {
   id: string;
@@ -123,7 +124,7 @@ export class TechPanelComponent {
   resultMsg = '';
   isError = false;
 
-  constructor(private gameService: GameService) {}
+  constructor(private gameService: GameService, private sound: SoundService) {}
 
   techsByEra(era: string): TechNode[] { return TECH_TREE.filter(t => t.era === era); }
   isResearched(id: string): boolean { return this.state?.player.researched_techs?.includes(id) ?? false; }
@@ -144,7 +145,7 @@ export class TechPanelComponent {
   selectTech(tech: TechNode): void {
     if (!this.isAvailable(tech)) return;
     this.gameService.sendAction(this.gameId, 'researchTechnology', { techId: tech.id }).subscribe({
-      next: () => { this.resultMsg = `Researching ${tech.name}!`; this.isError = false; },
+      next: () => { this.resultMsg = `Researching ${tech.name}!`; this.isError = false; this.sound.playResearch(); },
       error: (e: any) => { this.resultMsg = e.error?.detail ?? 'Error'; this.isError = true; }
     });
   }

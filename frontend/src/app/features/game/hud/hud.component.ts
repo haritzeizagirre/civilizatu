@@ -1,6 +1,7 @@
 import { Component, Input, Output, EventEmitter, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { GameState } from '../../../core/models/game.models';
+import { SoundService } from '../../../core/services/sound.service';
 
 @Component({
   selector: 'app-hud',
@@ -41,6 +42,7 @@ import { GameState } from '../../../core/models/game.models';
         <button class="hud-btn" (click)="saveGame.emit()" title="Save">💾</button>
         <button class="hud-btn" (click)="openTech.emit()" title="Technology">🧪</button>
         <button class="hud-btn" (click)="openDiplomacy.emit()" title="Diplomacy">🤝</button>
+        <button class="hud-btn" (click)="sound.toggleMute()" [title]="sound.muted ? 'Unmute' : 'Mute'">{{ sound.muted ? '🔇' : '🔊' }}</button>
         <button class="hud-btn" (click)="backToLobby.emit()" title="Menu">🏠</button>
         <button
           class="hud-btn end-turn"
@@ -96,6 +98,8 @@ export class HudComponent {
   @Output() openTech = new EventEmitter<void>();
   @Output() openDiplomacy = new EventEmitter<void>();
   @Output() backToLobby = new EventEmitter<void>();
+
+  constructor(public sound: SoundService) {}
 
   get researchPct(): number {
     const rp = this.state?.player.research_progress ?? 0;
