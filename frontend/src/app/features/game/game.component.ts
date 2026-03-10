@@ -91,6 +91,7 @@ import { VictoryModalComponent } from './victory-modal/victory-modal.component';
       <app-victory-modal
         *ngIf="state.result !== 'ongoing'"
         [result]="state.result"
+        [stats]="victoryStats"
         (restart)="backToLobby()"
       />
     </div>
@@ -153,6 +154,16 @@ export class GameComponent implements OnInit, OnDestroy {
 
   get selectedCity() {
     return this.state?.player.cities.find(c => c.id === this.selectedCityId) ?? null;
+  }
+
+  get victoryStats() {
+    if (!this.state) return null;
+    return {
+      turn: this.state.turn,
+      techs: this.state.player.researched_techs.length,
+      cities: this.state.player.cities.length,
+      units: this.state.player.units.length,
+    };
   }
 
   onUnitSelected(unitId: string): void { this.game.selectUnit(unitId); }

@@ -11,14 +11,14 @@ interface ResultConfig {
 }
 
 const RESULT_CONFIGS: Record<string, ResultConfig> = {
-  player_conquest: { isWin: true, title: 'Conquest Victory!', subtitle: 'You crushed all enemy cities. Civilization bows before you.', icon: '⚔', bgClass: 'win-conquest' },
-  player_science: { isWin: true, title: 'Science Victory!', subtitle: 'Your spaceships pierce the cosmos. Humanity looks to the stars.', icon: '🚀', bgClass: 'win-science' },
-  player_culture: { isWin: true, title: 'Cultural Victory!', subtitle: 'Your culture shines across the ages. History remembers you.', icon: '🎭', bgClass: 'win-culture' },
-  player_domination: { isWin: true, title: 'Domination Victory!', subtitle: 'You controlled the most territory at the end of time.', icon: '🏆', bgClass: 'win-domination' },
-  ai_conquest: { isWin: false, title: 'Defeat', subtitle: 'Rome consumed your lands. Rise again next time.', icon: '🔥', bgClass: 'lose' },
-  ai_science: { isWin: false, title: 'Defeat', subtitle: 'Rome reached the stars before you. Science waits for no one.', icon: '💫', bgClass: 'lose' },
-  ai_culture: { isWin: false, title: 'Defeat', subtitle: 'Rome\'s culture overshadowed yours. Study harder.', icon: '📜', bgClass: 'lose' },
-  ai_domination: { isWin: false, title: 'Defeat', subtitle: 'Rome dominated the age. Better luck next game.', icon: '🛡', bgClass: 'lose' },
+  player_win_conquest:  { isWin: true,  title: 'Conquest Victory!',   subtitle: 'You crushed all enemy cities. Civilization bows before you.', icon: '⚔', bgClass: 'win-conquest' },
+  player_win_science:   { isWin: true,  title: 'Science Victory!',    subtitle: 'Your spaceships pierce the cosmos. Humanity looks to the stars.', icon: '🚀', bgClass: 'win-science' },
+  player_win_culture:   { isWin: true,  title: 'Cultural Victory!',   subtitle: 'Your culture shines across the ages. History remembers you.', icon: '🎭', bgClass: 'win-culture' },
+  player_win_domination:{ isWin: true,  title: 'Domination Victory!', subtitle: 'You controlled the most territory at the end of time.', icon: '🏆', bgClass: 'win-domination' },
+  ai_win_conquest:      { isWin: false, title: 'Defeat',              subtitle: 'Rome consumed your lands. Rise again next time.', icon: '🔥', bgClass: 'lose' },
+  ai_win_science:       { isWin: false, title: 'Defeat',              subtitle: 'Rome reached the stars before you. Science waits for no one.', icon: '💫', bgClass: 'lose' },
+  ai_win_culture:       { isWin: false, title: 'Defeat',              subtitle: 'Rome\'s culture overshadowed yours. Study harder.', icon: '📜', bgClass: 'lose' },
+  ai_win_domination:    { isWin: false, title: 'Defeat',              subtitle: 'Rome dominated the age. Better luck next game.', icon: '🛡', bgClass: 'lose' },
 };
 
 @Component({
