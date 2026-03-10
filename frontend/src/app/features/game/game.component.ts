@@ -102,7 +102,7 @@ import { VictoryModalComponent } from './victory-modal/victory-modal.component';
     </ng-template>
   `,
   styles: [`
-    .game-shell { position: relative; width: 100vw; height: 100vh; overflow: hidden; background: #0e0a04; }
+    .game-shell { position: relative; display: flex; flex-direction: column; width: 100vw; height: 100vh; overflow: hidden; background: #0e0a04; }
     .loading-screen { display: flex; align-items: center; justify-content: center; height: 100vh; background: #0e0a04; color: #d4af37; font-family: 'Cinzel', serif; font-size: 1.5rem; }
   `]
 })

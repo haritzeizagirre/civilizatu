@@ -84,7 +84,7 @@ function hexCorners(cx: number, cy: number): [number, number][] {
     ></canvas>
   `,
   styles: [`
-    :host { display: block; width: 100%; height: 100%; overflow: hidden; }
+    :host { display: block; width: 100%; flex: 1 1 0; min-height: 0; overflow: hidden; }
     .hex-canvas { width: 100%; height: 100%; cursor: default; display: block; }
   `]
 })
